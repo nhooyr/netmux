@@ -12,15 +12,15 @@ type simpleMatcher struct {
 	magic []byte
 }
 
-func (m *simpleMatcher) Detect(header []byte) netmux.ProtocolStatus {
+func (m *simpleMatcher) Detect(header []byte) netmux.DetectorStatus {
 	if len(m.magic) > len(header) {
-		if bytes.Equal(m.magic[:len(header)], header) {
-			return netmux.StatusMore
+		if bytes.HasPrefix(m.magic, header) {
+			return netmux.DetectMore
 		}
-	} else if bytes.Equal(m.magic, header[:len(m.magic)]) {
-		return netmux.StatusDetected
+	} else if bytes.HasPrefix(header, m.magic) {
+		return netmux.DetectSuccess
 	}
-	return netmux.StatusRejected
+	return netmux.DetectRejected
 }
 
 type simpleHandler struct {

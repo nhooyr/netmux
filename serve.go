@@ -5,33 +5,33 @@ import (
 	"sync"
 )
 
-type ProtocolStatus int
+type Detector interface {
+	Detect(header []byte) DetectorStatus
+}
+
+type DetectorStatus int
 
 const (
-	StatusRejected ProtocolStatus = iota
-	StatusMore
-	StatusDetected
+	DetectRejected DetectorStatus = iota
+	DetectMore
+	DetectSuccess
 )
-
-type Protocol interface {
-	Detect(header []byte) ProtocolStatus
-}
 
 type Handler interface {
 	Handle(c net.Conn) net.Conn
 }
 
 type Service interface {
-	Protocol
+	Detector
 	Handler
 }
 
 type service struct {
-	Protocol
+	Detector
 	Handler
 }
 
-func NewService(p Protocol, h Handler) Service {
+func NewService(p Detector, h Handler) Service {
 	return &service{p, h}
 }
 
@@ -95,10 +95,10 @@ func (s *Server) serve(c net.Conn) {
 		for i := 0; i < len(srvcs); i++ {
 			srvc := srvcs[i]
 			switch srvc.Detect(header) {
-			case StatusDetected:
+			case DetectSuccess:
 				s.handle(srvc, header, c)
 				return
-			case StatusRejected:
+			case DetectRejected:
 				srvcs = append(srvcs[:i], srvcs[i+1:]...)
 				i--
 			}
