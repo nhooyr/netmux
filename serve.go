@@ -1,12 +1,6 @@
 package netmux
 
-import (
-	"net"
-	"sync"
-	"time"
-
-	"github.com/nhooyr/color/log"
-)
+import "net"
 
 type Detector interface {
 	Detect(header []byte) DetectorStatus
@@ -77,11 +71,7 @@ func (s *Server) Serve(l net.Listener) error {
 	}
 }
 
-var count, sum time.Duration
-var m sync.Mutex
-
 func (s *Server) serve(c net.Conn) {
-	now := time.Now()
 	header := make([]byte, 0, s.maxHeaderBytes)
 	srvcs := append([]Service(nil), s.services...)
 	for len(srvcs) > 0 && len(header) != cap(header) {
@@ -96,12 +86,6 @@ func (s *Server) serve(c net.Conn) {
 			switch srvc.Detect(header) {
 			case DetectSuccess:
 				s.handle(srvc, header, c)
-				m.Lock()
-				count++
-				sum += time.Since(now)
-				avg := sum / count
-				m.Unlock()
-				log.Print(avg)
 				return
 			case DetectRejected:
 				srvcs = append(srvcs[:i], srvcs[i+1:]...)
