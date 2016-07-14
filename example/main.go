@@ -23,22 +23,27 @@ func (m *simpleMatcher) Detect(header []byte) netmux.DetectorStatus {
 	return netmux.DetectRejected
 }
 
-type simpleHandler struct {
-	response []byte
+func (m *simpleMatcher) Max() int {
+	return len(m.magic)
 }
+
+type simpleHandler struct {}
+
+var resp = []byte("SSH")
 
 func (h *simpleHandler) Handle(c net.Conn) net.Conn {
 	defer c.Close()
-	c.Write(h.response)
+	for i := 0; i < 100; i++ {
+		c.Write(resp)
+	}
 	return nil
 }
 
 func main() {
-	xd := netmux.NewService(&simpleMatcher{[]byte("xd")}, &simpleHandler{[]byte("ixday")})
-	one := netmux.NewService(&simpleMatcher{[]byte("one")}, &simpleHandler{[]byte("two")})
-	l, err := net.Listen("tcp", ":3333")
+	ssh := netmux.NewService(&simpleMatcher{[]byte("SSH")}, &simpleHandler{})
+	l, err := net.Listen("tcp", ":444")
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Fatal(netmux.NewServer(xd, one).Serve(l))
+	log.Fatal(netmux.NewServer(nil, ssh).Serve(l))
 }

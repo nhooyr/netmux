@@ -2,11 +2,14 @@ package netmux
 
 import (
 	"net"
-	"sync"
+	"time"
+
+	"github.com/nhooyr/color/log"
 )
 
 type Detector interface {
 	Detect(header []byte) DetectorStatus
+	Max() int
 }
 
 type DetectorStatus int
@@ -36,31 +39,30 @@ func NewService(p Detector, h Handler) Service {
 }
 
 type Server struct {
-	headerPool *sync.Pool
-	services   []Service
-	fallback   Service
+	services       []Service
+	fallback       Service
+	maxHeaderBytes int
 }
 
-func NewServer(srvcs ...Service) *Server {
+func NewServer(fallback Service, srvcs ...Service) *Server {
+	if len(srvcs) == 0 {
+		panic("length of services is 0")
+	}
 	s := &Server{
 		services: srvcs,
 		fallback: nil,
 	}
+	if fallback != nil {
+		srvcs = append(srvcs, fallback)
+	}
+	s.maxHeaderBytes = srvcs[0].Max()
+	for i := 1; i < len(srvcs); i++ {
+		n := srvcs[i].Max()
+		if s.maxHeaderBytes < n {
+			s.maxHeaderBytes = n
+		}
+	}
 	return s
-}
-
-type option func(*Server)
-
-func (s *Server) Option(opts ...option) {
-	for _, opt := range opts {
-		opt(s)
-	}
-}
-
-func Fallback(srvc Service) option {
-	return func(s *Server) {
-		s.fallback = srvc
-	}
 }
 
 func (s *Server) Serve(l net.Listener) error {
@@ -74,19 +76,14 @@ func (s *Server) Serve(l net.Listener) error {
 	}
 }
 
-const maxHeaderBytes = 64
-
-var headerPool = &sync.Pool{
-	New: func() interface{} {
-		return make([]byte, 0, maxHeaderBytes)
-	},
-}
+var count, sum time.Duration
 
 func (s *Server) serve(c net.Conn) {
-	header := headerPool.Get().([]byte)
+	now := time.Now()
+	header := make([]byte, 0, s.maxHeaderBytes)
 	srvcs := append([]Service(nil), s.services...)
-	for len(srvcs) > 0 && len(header) != maxHeaderBytes {
-		n, err := c.Read(header[len(header):maxHeaderBytes])
+	for len(srvcs) > 0 && len(header) != cap(header) {
+		n, err := c.Read(header[len(header):cap(header)])
 		if err != nil {
 			break
 		}
@@ -97,6 +94,9 @@ func (s *Server) serve(c net.Conn) {
 			switch srvc.Detect(header) {
 			case DetectSuccess:
 				s.handle(srvc, header, c)
+				count++
+				sum += time.Since(now)
+				log.Print(sum / count)
 				return
 			case DetectRejected:
 				srvcs = append(srvcs[:i], srvcs[i+1:]...)
@@ -110,16 +110,12 @@ func (s *Server) serve(c net.Conn) {
 		return
 	}
 
-	headerPool.Put(header[:0])
 	c.Close()
 }
 
 func (s *Server) handle(h Handler, header []byte, c net.Conn) {
 	hc := newHeaderConn(header, c)
 	c = h.Handle(hc)
-	if hc.header != nil {
-		headerPool.Put(hc.header[:0])
-	}
 	if c != nil {
 		s.serve(c)
 	}
@@ -141,13 +137,11 @@ func (hc *headerConn) Read(p []byte) (n int, err error) {
 			return len(p), nil
 		}
 		if len(hc.header) == len(p) {
-			headerPool.Put(hc.header[:0])
 			hc.header = nil
 			return len(p), nil
 		}
 		n, err = hc.Conn.Read(p[len(hc.header):])
 		n += len(hc.header)
-		headerPool.Put(hc.header[:0])
 		hc.header = nil
 		return n, err
 	}
