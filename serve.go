@@ -2,6 +2,7 @@ package netmux
 
 import (
 	"net"
+	"sync"
 	"time"
 
 	"github.com/nhooyr/color/log"
@@ -77,6 +78,7 @@ func (s *Server) Serve(l net.Listener) error {
 }
 
 var count, sum time.Duration
+var m sync.Mutex
 
 func (s *Server) serve(c net.Conn) {
 	now := time.Now()
@@ -94,9 +96,12 @@ func (s *Server) serve(c net.Conn) {
 			switch srvc.Detect(header) {
 			case DetectSuccess:
 				s.handle(srvc, header, c)
+				m.Lock()
 				count++
 				sum += time.Since(now)
-				log.Print(sum / count)
+				avg := sum / count
+				m.Unlock()
+				log.Print(avg)
 				return
 			case DetectRejected:
 				srvcs = append(srvcs[:i], srvcs[i+1:]...)

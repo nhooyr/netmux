@@ -41,7 +41,7 @@ func (h *simpleHandler) Handle(c net.Conn) net.Conn {
 
 func main() {
 	ssh := netmux.NewService(&simpleMatcher{[]byte("SSH")}, &simpleHandler{})
-	l, err := net.Listen("tcp", ":444")
+	l, err := net.Listen("tcp", "localhost:3333")
 	if err != nil {
 		log.Fatal(err)
 	}
