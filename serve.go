@@ -1,35 +1,23 @@
 package netmux
 
-import "net"
+import (
+	"net"
 
-type Detector interface {
-	Detect(header []byte) DetectorStatus
-	Max() int
-}
-
-type DetectorStatus int
-
-const (
-	DetectRejected DetectorStatus = iota
-	DetectMore
-	DetectSuccess
+	"github.com/nhooyr/netmux/detect"
+	"github.com/nhooyr/netmux/handle"
 )
 
-type Handler interface {
-	Handle(c net.Conn) net.Conn
-}
-
 type Service interface {
-	Detector
-	Handler
+	detect.Detector
+	handle.Handler
 }
 
 type service struct {
-	Detector
-	Handler
+	detect.Detector
+	handle.Handler
 }
 
-func NewService(p Detector, h Handler) Service {
+func NewService(p detect.Detector, h handle.Handler) Service {
 	return &service{p, h}
 }
 
@@ -40,19 +28,16 @@ type Server struct {
 }
 
 func NewServer(fallback Service, srvcs ...Service) *Server {
-	if len(srvcs) == 0 {
-		panic("length of services is 0")
-	}
 	s := &Server{
 		services: srvcs,
 		fallback: nil,
 	}
+	s.maxHeaderBytes = srvcs[0].MaxHeaderBytes()
 	if fallback != nil {
 		srvcs = append(srvcs, fallback)
 	}
-	s.maxHeaderBytes = srvcs[0].Max()
 	for i := 1; i < len(srvcs); i++ {
-		n := srvcs[i].Max()
+		n := srvcs[i].MaxHeaderBytes()
 		if s.maxHeaderBytes < n {
 			s.maxHeaderBytes = n
 		}
@@ -72,9 +57,9 @@ func (s *Server) Serve(l net.Listener) error {
 }
 
 func (s *Server) serve(c net.Conn) {
-	header := make([]byte, 0, s.maxHeaderBytes)
+	header := make([]byte, 0, s.maxHeaderBytes+128)
 	srvcs := append([]Service(nil), s.services...)
-	for len(srvcs) > 0 && len(header) != cap(header) {
+	for len(srvcs) > 0 && len(header) < s.maxHeaderBytes {
 		n, err := c.Read(header[len(header):cap(header)])
 		if err != nil {
 			break
@@ -83,11 +68,12 @@ func (s *Server) serve(c net.Conn) {
 
 		for i := 0; i < len(srvcs); i++ {
 			srvc := srvcs[i]
-			switch srvc.Detect(header) {
-			case DetectSuccess:
+			status := srvc.Detect(header)
+			switch {
+			case status == detect.Success:
 				s.handle(srvc, header, c)
 				return
-			case DetectRejected:
+			case status == detect.Rejected && len(header) < s.maxHeaderBytes:
 				srvcs = append(srvcs[:i], srvcs[i+1:]...)
 				i--
 			}
@@ -102,7 +88,7 @@ func (s *Server) serve(c net.Conn) {
 	c.Close()
 }
 
-func (s *Server) handle(h Handler, header []byte, c net.Conn) {
+func (s *Server) handle(h handle.Handler, header []byte, c net.Conn) {
 	hc := newHeaderConn(header, c)
 	c = h.Handle(hc)
 	if c != nil {
