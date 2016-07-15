@@ -3,7 +3,7 @@ package detector
 import "crypto/tls"
 
 const (
-	TLSMajor        = tls.VersionTLS12 & 0xFF00
+	TLSMajor        = tls.VersionTLS12 >> 8
 	TLSHighestMinor = tls.VersionTLS12 & 0xFF // Bump when new releases are made available
 	TLSHandshake    = 0x16
 	TLSClientHello  = 0x01
@@ -36,7 +36,6 @@ func (t *TLS) Detect(header []byte) Status {
 		header[5] == TLSClientHello {
 		return Success
 	}
-	tls.Conn.ConnectionState()
 	return Rejected
 }
 

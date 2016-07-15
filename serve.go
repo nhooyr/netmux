@@ -3,21 +3,21 @@ package netmux
 import (
 	"net"
 
-	"github.com/nhooyr/netmux/detect"
-	"github.com/nhooyr/netmux/handle"
+	"github.com/nhooyr/netmux/detector"
+	"github.com/nhooyr/netmux/handler"
 )
 
 type Service interface {
-	detect.Detector
-	handle.Handler
+	detector.Detector
+	handler.Handler
 }
 
 type service struct {
-	detect.Detector
-	handle.Handler
+	detector.Detector
+	handler.Handler
 }
 
-func NewService(p detect.Detector, h handle.Handler) Service {
+func NewService(p detector.Detector, h handler.Handler) Service {
 	return &service{p, h}
 }
 
@@ -70,10 +70,10 @@ func (s *Server) serve(c net.Conn) {
 			srvc := srvcs[i]
 			status := srvc.Detect(header)
 			switch {
-			case status == detect.Success:
+			case status == detector.Success:
 				s.handle(srvc, header, c)
 				return
-			case status == detect.Rejected && len(header) < s.maxHeaderBytes:
+			case status == detector.Rejected && len(header) < s.maxHeaderBytes:
 				srvcs = append(srvcs[:i], srvcs[i+1:]...)
 				i--
 			}
@@ -88,7 +88,7 @@ func (s *Server) serve(c net.Conn) {
 	c.Close()
 }
 
-func (s *Server) handle(h handle.Handler, header []byte, c net.Conn) {
+func (s *Server) handle(h handler.Handler, header []byte, c net.Conn) {
 	hc := newHeaderConn(header, c)
 	c = h.Handle(hc)
 	if c != nil {
