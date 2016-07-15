@@ -1,4 +1,4 @@
-package detect
+package detector
 
 type Detector interface {
 	Detect(header []byte) Status
