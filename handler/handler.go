@@ -3,5 +3,5 @@ package handler
 import "net"
 
 type Handler interface {
-	Handle(c net.Conn) net.Conn
+	Handle(c net.Conn)
 }

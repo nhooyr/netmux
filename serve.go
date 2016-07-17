@@ -23,21 +23,18 @@ func NewService(p detector.Detector, h handler.Handler) Service {
 
 type Server struct {
 	services       []Service
-	fallback       Service
+	fallback       handler.Handler
 	maxHeaderBytes int
 }
 
-func NewServer(fallback Service, srvcs ...Service) *Server {
+func NewServer(srvcs []Service, fallback handler.Handler) *Server {
 	s := &Server{
 		services: srvcs,
 		fallback: nil,
 	}
-	s.maxHeaderBytes = srvcs[0].MaxHeaderBytes()
-	if fallback != nil {
-		srvcs = append(srvcs, fallback)
-	}
+	s.maxHeaderBytes = srvcs[0].MaxBytes()
 	for i := 1; i < len(srvcs); i++ {
-		n := srvcs[i].MaxHeaderBytes()
+		n := srvcs[i].MaxBytes()
 		if s.maxHeaderBytes < n {
 			s.maxHeaderBytes = n
 		}
@@ -52,12 +49,23 @@ func (s *Server) Serve(l net.Listener) error {
 			return err
 		}
 
-		go s.serve(c)
+		go s.Handle(c)
 	}
 }
 
-func (s *Server) serve(c net.Conn) {
-	header := make([]byte, 0, s.maxHeaderBytes+128)
+func (s *Server) ServeTLS(l net.Listener) error {
+	for {
+		c, err := l.Accept()
+		if err != nil {
+			return err
+		}
+
+		go s.Handle(c)
+	}
+}
+
+func (s *Server) Handle(c net.Conn) {
+	header := make([]byte, 0, s.maxHeaderBytes)
 	srvcs := append([]Service(nil), s.services...)
 	for len(srvcs) > 0 && len(header) < s.maxHeaderBytes {
 		n, err := c.Read(header[len(header):cap(header)])
@@ -70,10 +78,10 @@ func (s *Server) serve(c net.Conn) {
 			srvc := srvcs[i]
 			status := srvc.Detect(header)
 			switch {
-			case status == detector.Success:
-				s.handle(srvc, header, c)
+			case status == detector.StatusAccepted:
+				srvc.Handle(newHeaderConn(header, c))
 				return
-			case status == detector.Rejected && len(header) < s.maxHeaderBytes:
+			case status == detector.StatusRejected && len(header) < s.maxHeaderBytes:
 				srvcs = append(srvcs[:i], srvcs[i+1:]...)
 				i--
 			}
@@ -81,19 +89,11 @@ func (s *Server) serve(c net.Conn) {
 	}
 
 	if s.fallback != nil {
-		s.handle(s.fallback, nil, c)
+		s.fallback.Handle(newHeaderConn(header, c))
 		return
 	}
 
 	c.Close()
-}
-
-func (s *Server) handle(h handler.Handler, header []byte, c net.Conn) {
-	hc := newHeaderConn(header, c)
-	c = h.Handle(hc)
-	if c != nil {
-		s.serve(c)
-	}
 }
 
 type headerConn struct {

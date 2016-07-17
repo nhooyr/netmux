@@ -2,13 +2,13 @@ package detector
 
 type Detector interface {
 	Detect(header []byte) Status
-	MaxHeaderBytes() int
+	MaxBytes() int
 }
 
 type Status int
 
 const (
-	Rejected Status = iota
-	More
-	Success
+	StatusRejected Status = iota
+	StatusUncertain
+	StatusAccepted
 )

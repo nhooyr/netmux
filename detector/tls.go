@@ -1,17 +1,19 @@
 package detector
 
-import "crypto/tls"
+import (
+	"crypto/tls"
+)
 
 const (
-	TLSMajor        = tls.VersionTLS12 >> 8
-	TLSHighestMinor = tls.VersionTLS12 & 0xFF // Bump when new releases are made available
 	TLSHandshake    = 0x16
+	TLSMajor        = tls.VersionTLS12 >> 8
+	TLSHighestMinor = tls.VersionTLS12 & 0xFF
 	TLSClientHello  = 0x01
 )
 
-type TLS tls.Config
+type TLS struct{}
 
-func (t *TLS) Detect(header []byte) Status {
+func (_ TLS) Detect(header []byte) Status {
 	if len(header) < 6 {
 		switch {
 		case len(header) >= 3:
@@ -28,17 +30,17 @@ func (t *TLS) Detect(header []byte) Status {
 			if header[0] != TLSHandshake {
 				break
 			}
-			return More
+			return StatusUncertain
 		}
 	} else if header[0] == TLSHandshake &&
 		header[1] == TLSMajor &&
 		header[2] <= TLSHighestMinor &&
 		header[5] == TLSClientHello {
-		return Success
+		return StatusAccepted
 	}
-	return Rejected
+	return StatusRejected
 }
 
-func (t *TLS) MaxHeaderBytes() int {
+func (_ TLS) MaxHeaderBytes() int {
 	return 6
 }
