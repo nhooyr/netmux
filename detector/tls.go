@@ -2,6 +2,8 @@ package detector
 
 import (
 	"crypto/tls"
+
+	"github.com/nhooyr/netmux"
 )
 
 const (
@@ -13,7 +15,7 @@ const (
 
 type tlsDetector struct{}
 
-func (_ tlsDetector) Detect(header []byte) (detected, certain bool) {
+func (_ tlsDetector) Detect(header []byte) netmux.DetectStatus {
 	if len(header) < 6 {
 		switch {
 		case len(header) >= 3:
@@ -30,19 +32,15 @@ func (_ tlsDetector) Detect(header []byte) (detected, certain bool) {
 			if header[0] != tlsHandshake {
 				break
 			}
-			return false, false
+			return netmux.DetectUncertain
 		}
 	} else if header[0] == tlsHandshake &&
 		header[1] == tlsMajor &&
 		header[2] <= tlsHighestMinor &&
 		header[5] == tlsClientHello {
-		return StatusAccepted
+		return netmux.DetectAccepted
 	}
-	return StatusRejected
-}
-
-func (_ tlsDetector) MaxHeaderBytes() int {
-	return 6
+	return netmux.DetectRejected
 }
 
 var TLSDetector tlsDetector

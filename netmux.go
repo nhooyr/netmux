@@ -6,9 +6,9 @@ import (
 
 type Detector interface {
 	Detect(header []byte) DetectStatus
-	MaxHeaderBytes() int
 }
 
+// TODO rename perhaps?
 type DetectStatus int
 
 const (
@@ -36,22 +36,14 @@ func NewService(d Detector, h Handler) Service {
 }
 
 type Server struct {
-	services       []Service
-	fallback       Handler
-	maxHeaderBytes int
+	services []Service
+	fallback Handler
 }
 
 func NewServer(srvcs []Service, fallback Handler) *Server {
 	s := &Server{
 		services: srvcs,
 		fallback: nil,
-	}
-	s.maxHeaderBytes = srvcs[0].MaxHeaderBytes()
-	for i := 1; i < len(srvcs); i++ {
-		n := srvcs[i].MaxHeaderBytes()
-		if s.maxHeaderBytes < n {
-			s.maxHeaderBytes = n
-		}
 	}
 	return s
 }
@@ -78,11 +70,14 @@ func (s *Server) ServeTLS(l net.Listener) error {
 	}
 }
 
+// TODO better way to do this
+const MaxHeaderBytes = 128
+
 func (s *Server) Handle(c net.Conn) {
-	header := make([]byte, 0, s.maxHeaderBytes)
+	header := make([]byte, 0, MaxHeaderBytes)
 	srvcs := append([]Service(nil), s.services...)
-	for len(srvcs) > 0 && len(header) < s.maxHeaderBytes {
-		n, err := c.Read(header[len(header):cap(header)])
+	for len(srvcs) > 0 && len(header) < MaxHeaderBytes {
+		n, err := c.Read(header[len(header):MaxHeaderBytes])
 		if err != nil {
 			break
 		}
@@ -95,7 +90,7 @@ func (s *Server) Handle(c net.Conn) {
 			case status == DetectAccepted:
 				srvc.Handle(newHeaderConn(header, c))
 				return
-			case status == DetectRejected && len(header) < s.maxHeaderBytes:
+			case status == DetectRejected && len(header) < MaxHeaderBytes:
 				srvcs = append(srvcs[:i], srvcs[i+1:]...)
 				i--
 			}

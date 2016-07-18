@@ -8,30 +8,12 @@ import (
 	"net"
 	"sync"
 
-	"github.com/nhooyr/netmux/handler"
+	"github.com/nhooyr/netmux"
 	"github.com/rjeczalik/notify"
 )
 
 type Detector interface {
 	Detect(state *tls.ConnectionState) (accepted bool)
-}
-
-type Handler interface {
-	Handle(c *tls.Conn)
-}
-
-type Service interface {
-	Detector
-	Handler
-}
-
-type service struct {
-	Detector
-	Handler
-}
-
-func NewService(d Detector, h Handler) Service {
-	return &service{d, h}
 }
 
 type ProtoDetector []string
@@ -56,63 +38,30 @@ func (names ServerDetector) Detect(state *tls.ConnectionState) bool {
 	return false
 }
 
-// TODO how to handle when CRL and peer's certificate issuer are different
-type RevokedDetector struct {
-	revokedCerts []pkix.RevokedCertificate
-	mu           sync.RWMutex
+type Handler interface {
+	Handle(c *tls.Conn)
 }
 
-func parseCRL(path string) ([]pkix.RevokedCertificate, error) {
-	f, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	crl, err := x509.ParseCRL(f)
-	if err != nil {
-		return nil, err
-	}
-	return crl.TBSCertList.RevokedCertificates, nil
+type NetmuxWrapper struct {
+	netmux.Handler
 }
 
-func NewRevokedDetector(crlPath string) (rd *RevokedDetector, err error) {
-	rd = new(RevokedDetector)
-	rd.revokedCerts, err = parseCRL(crlPath)
-	if err != nil {
-		return nil, err
-	}
-	c := make(chan notify.EventInfo, 1)
-	err = notify.Watch(crlPath, c, notify.Write)
-	if err != nil {
-		return nil, err
-	}
-	go func() {
-		defer notify.Stop(c)
-		for {
-			<-c
-			rd.mu.Lock()
-			rd.revokedCerts, err = parseCRL(crlPath)
-			if err != nil {
-				panic(err)
-			}
-			rd.mu.Unlock()
-		}
-	}()
-	return rd, nil
+func (h *NetmuxWrapper) Handle(c *tls.Conn) {
+	h.Handler.Handle(c)
 }
 
-func (rd RevokedDetector) Detect(state *tls.ConnectionState) bool {
-	rd.mu.RLock()
-	defer rd.mu.RUnlock()
-	for _, rc := range rd.revokedCerts {
-		if state.PeerCertificates[0].SerialNumber.Cmp(rc.SerialNumber) == 0 {
-			return true
-		}
-	}
-	return false
+type Service interface {
+	Detector
+	Handler
 }
 
-func (_ RevokedDetector) Handle(c *tls.Conn) {
-	c.Close()
+type service struct {
+	Detector
+	Handler
+}
+
+func NewService(d Detector, h Handler) Service {
+	return &service{d, h}
 }
 
 type Server struct {
@@ -156,10 +105,61 @@ func NewHandshaker(config *tls.Config, next Handler) *Handshaker {
 	return &Handshaker{config, next}
 }
 
-type NetmuxWrapper struct {
-	handler.Handler
+// TODO how to handle when CRL and peer's certificate issuer are different
+type RevokedDetector struct {
+	revokedCerts []pkix.RevokedCertificate
+	mu           sync.RWMutex
 }
 
-func (h *NetmuxWrapper) Handle(c *tls.Conn) {
-	h.Handler.Handle(c)
+func NewRevokedDetector(crlPath string) (rd *RevokedDetector, err error) {
+	rd = new(RevokedDetector)
+	rd.revokedCerts, err = parseCRL(crlPath)
+	if err != nil {
+		return nil, err
+	}
+	c := make(chan notify.EventInfo, 1)
+	err = notify.Watch(crlPath, c, notify.Write)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		defer notify.Stop(c)
+		for {
+			<-c
+			rd.mu.Lock()
+			rd.revokedCerts, err = parseCRL(crlPath)
+			if err != nil {
+				panic(err)
+			}
+			rd.mu.Unlock()
+		}
+	}()
+	return rd, nil
+}
+
+func parseCRL(path string) ([]pkix.RevokedCertificate, error) {
+	f, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	crl, err := x509.ParseCRL(f)
+	if err != nil {
+		return nil, err
+	}
+	return crl.TBSCertList.RevokedCertificates, nil
+}
+
+func (rd RevokedDetector) Detect(state *tls.ConnectionState) bool {
+	rd.mu.RLock()
+	defer rd.mu.RUnlock()
+	for _, rc := range rd.revokedCerts {
+		if state.PeerCertificates[0].SerialNumber.Cmp(rc.SerialNumber) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (_ RevokedDetector) Handle(c *tls.Conn) {
+	c.Close()
 }
