@@ -2,32 +2,46 @@ package netmux
 
 import (
 	"net"
-
-	"github.com/nhooyr/netmux/detector"
-	"github.com/nhooyr/netmux/handler"
 )
 
+type Detector interface {
+	Detect(header []byte) DetectStatus
+	MaxHeaderBytes() int
+}
+
+type DetectStatus int
+
+const (
+	DetectAccepted DetectStatus = iota
+	DetectUncertain
+	DetectRejected
+)
+
+type Handler interface {
+	Handle(c net.Conn)
+}
+
 type Service interface {
-	detector.Detector
-	handler.Handler
+	Detector
+	Handler
 }
 
 type service struct {
-	detector.Detector
-	handler.Handler
+	Detector
+	Handler
 }
 
-func NewService(d detector.Detector, h handler.Handler) Service {
+func NewService(d Detector, h Handler) Service {
 	return &service{d, h}
 }
 
 type Server struct {
 	services       []Service
-	fallback       handler.Handler
+	fallback       Handler
 	maxHeaderBytes int
 }
 
-func NewServer(srvcs []Service, fallback handler.Handler) *Server {
+func NewServer(srvcs []Service, fallback Handler) *Server {
 	s := &Server{
 		services: srvcs,
 		fallback: nil,
@@ -78,10 +92,10 @@ func (s *Server) Handle(c net.Conn) {
 			srvc := srvcs[i]
 			status := srvc.Detect(header)
 			switch {
-			case status == detector.StatusAccepted:
+			case status == DetectAccepted:
 				srvc.Handle(newHeaderConn(header, c))
 				return
-			case status == detector.StatusRejected && len(header) < s.maxHeaderBytes:
+			case status == DetectRejected && len(header) < s.maxHeaderBytes:
 				srvcs = append(srvcs[:i], srvcs[i+1:]...)
 				i--
 			}

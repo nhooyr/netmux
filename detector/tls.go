@@ -13,7 +13,7 @@ const (
 
 type tlsDetector struct{}
 
-func (_ tlsDetector) Detect(header []byte) Status {
+func (_ tlsDetector) Detect(header []byte) (detected, certain bool) {
 	if len(header) < 6 {
 		switch {
 		case len(header) >= 3:
@@ -30,7 +30,7 @@ func (_ tlsDetector) Detect(header []byte) Status {
 			if header[0] != tlsHandshake {
 				break
 			}
-			return StatusUncertain
+			return false, false
 		}
 	} else if header[0] == tlsHandshake &&
 		header[1] == tlsMajor &&

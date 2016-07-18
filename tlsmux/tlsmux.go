@@ -13,7 +13,7 @@ import (
 )
 
 type Detector interface {
-	Detect(state *tls.ConnectionState) (ok bool)
+	Detect(state *tls.ConnectionState) (accepted bool)
 }
 
 type Handler interface {
