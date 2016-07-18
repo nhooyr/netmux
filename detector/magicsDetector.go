@@ -26,3 +26,23 @@ func (m *MagicsDetector) Detect(header []byte) netmux.DetectStatus {
 func NewMagicsDetector(magics [][]byte) *MagicsDetector {
 	return &MagicsDetector{magics}
 }
+
+var HTTP = NewMagicsDetector(
+	[][]byte{
+		[]byte("GET"),
+		[]byte("PUT"),
+		[]byte("HEAD"),
+		[]byte("POST"),
+		[]byte("PATCH"),
+		[]byte("TRACE"),
+		[]byte("DELETE"),
+		[]byte("CONNECT"),
+		[]byte("OPTIONS"),
+	},
+)
+
+var SSH = NewMagicsDetector(
+	[][]byte{
+		[]byte("SSH"),
+	},
+)
