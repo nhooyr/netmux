@@ -5,42 +5,44 @@ import (
 )
 
 const (
-	TLSHandshake    = 0x16
-	TLSMajor        = tls.VersionTLS12 >> 8
-	TLSHighestMinor = tls.VersionTLS12 & 0xFF
-	TLSClientHello  = 0x01
+	tlsHandshake    = 0x16
+	tlsMajor        = tls.VersionTLS12 >> 8
+	tlsHighestMinor = tls.VersionTLS12 & 0xFF
+	tlsClientHello  = 0x01
 )
 
-type TLS struct{}
+type tlsDetector struct{}
 
-func (_ TLS) Detect(header []byte) Status {
+func (_ tlsDetector) Detect(header []byte) Status {
 	if len(header) < 6 {
 		switch {
 		case len(header) >= 3:
-			if header[2] > TLSHighestMinor {
+			if header[2] > tlsHighestMinor {
 				break
 			}
 			fallthrough
 		case len(header) == 2:
-			if header[1] != TLSMajor {
+			if header[1] != tlsMajor {
 				break
 			}
 			fallthrough
 		case len(header) == 1:
-			if header[0] != TLSHandshake {
+			if header[0] != tlsHandshake {
 				break
 			}
 			return StatusUncertain
 		}
-	} else if header[0] == TLSHandshake &&
-		header[1] == TLSMajor &&
-		header[2] <= TLSHighestMinor &&
-		header[5] == TLSClientHello {
+	} else if header[0] == tlsHandshake &&
+		header[1] == tlsMajor &&
+		header[2] <= tlsHighestMinor &&
+		header[5] == tlsClientHello {
 		return StatusAccepted
 	}
 	return StatusRejected
 }
 
-func (_ TLS) MaxHeaderBytes() int {
+func (_ tlsDetector) MaxHeaderBytes() int {
 	return 6
 }
+
+var TLSDetector tlsDetector

@@ -2,14 +2,15 @@ package handler
 
 import "net"
 
-type responseHandler struct {
+type ResponseHandler struct {
 	resp []byte
 }
 
-func (rh *responseHandler) Handle(c net.Conn) {
+func (rh *ResponseHandler) Handle(c net.Conn) {
 	c.Write(rh.resp)
+	c.Close()
 }
 
-func NewResponseHandler(resp []byte) *responseHandler {
-	return &responseHandler{resp}
+func NewResponseHandler(resp []byte) *ResponseHandler {
+	return &ResponseHandler{resp}
 }

@@ -17,8 +17,8 @@ type service struct {
 	handler.Handler
 }
 
-func NewService(p detector.Detector, h handler.Handler) Service {
-	return &service{p, h}
+func NewService(d detector.Detector, h handler.Handler) Service {
+	return &service{d, h}
 }
 
 type Server struct {
@@ -32,9 +32,9 @@ func NewServer(srvcs []Service, fallback handler.Handler) *Server {
 		services: srvcs,
 		fallback: nil,
 	}
-	s.maxHeaderBytes = srvcs[0].MaxBytes()
+	s.maxHeaderBytes = srvcs[0].MaxHeaderBytes()
 	for i := 1; i < len(srvcs); i++ {
-		n := srvcs[i].MaxBytes()
+		n := srvcs[i].MaxHeaderBytes()
 		if s.maxHeaderBytes < n {
 			s.maxHeaderBytes = n
 		}

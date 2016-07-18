@@ -2,7 +2,7 @@ package detector
 
 type Detector interface {
 	Detect(header []byte) Status
-	MaxBytes() int
+	MaxHeaderBytes() int
 }
 
 type Status int

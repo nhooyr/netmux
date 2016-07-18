@@ -1,47 +1,37 @@
-package netmux
+package netmux_test
 
 import (
+	"crypto/tls"
 	"net"
 	"testing"
 
+	"github.com/nhooyr/netmux"
 	"github.com/nhooyr/netmux/detector"
 	"github.com/nhooyr/netmux/handler"
+	"github.com/nhooyr/netmux/tlsmux"
 )
 
-var (
-	req  = []byte("ECHO")
-	resp = make([]byte, 99999)
-)
+const certRoot = "/usr/local/etc/dotfiles/certs/aubble.com/"
 
-func BenchmarkServe(b *testing.B) {
-	d := detector.NewMagicsDetector([][]byte{req})
-	h := handler.NewResponseHandler(resp)
-	s := NewServer(nil, NewService(d, h))
-	l, err := net.Listen("tcp", "localhost:0")
+func TestServe(t *testing.T) {
+	cert, err := tls.LoadX509KeyPair(certRoot+"cert.pem", certRoot+"key.pem")
 	if err != nil {
-		b.Fatal(err)
+		t.Fatal(err)
 	}
-	go writeEcho(l.Addr())
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		c, err := l.Accept()
-		if err != nil {
-			b.Fatal(err)
-		}
-		s.Handle(c)
-	}
-	l.Close()
-}
+	config := &tls.Config{Certificates: []tls.Certificate{cert}, NextProtos: []string{"super"}}
+	responderXD := &tlsmux.NetmuxWrapper{handler.NewResponseHandler([]byte("xd"))}
+	responderSuper := &tlsmux.NetmuxWrapper{handler.NewResponseHandler([]byte("Super"))}
+	superService := tlsmux.NewService(tlsmux.ProtoDetector([]string{"super"}), responderSuper)
+	tlsServer := tlsmux.NewServer([]tlsmux.Service{superService}, responderXD)
+	tlsHandshaker := tlsmux.NewHandshaker(config, tlsServer)
 
-func writeEcho(addr net.Addr) {
-	for {
-		c, err := net.Dial(addr.Network(), addr.String())
-		if err != nil {
-			continue
-		}
-		c.Write(req)
-		c.Write(resp)
-		c.Read(resp)
-		c.Close()
+	tlsService := netmux.NewService(detector.TLSDetector, tlsHandshaker)
+	srvcs := []netmux.Service{tlsService}
+	s := netmux.NewServer(srvcs, nil)
+
+	l, err := net.Listen("tcp", ":3333")
+	if err != nil {
+		t.Fatal(err)
 	}
+	s.Serve(l)
 }

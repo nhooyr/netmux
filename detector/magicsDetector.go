@@ -21,7 +21,7 @@ func (m *MagicsDetector) Detect(header []byte) Status {
 	return StatusRejected
 }
 
-func (m *MagicsDetector) MaxBytes() int {
+func (m *MagicsDetector) MaxHeaderBytes() int {
 	var max = len(m.magics[0])
 	for _, magic := range m.magics[1:] {
 		if max > len(magic) {
