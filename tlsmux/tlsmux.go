@@ -106,6 +106,12 @@ func NewHandshaker(config *tls.Config, next Handler) *Handshaker {
 }
 
 // TODO how to handle when CRL and peer's certificate issuer are different
+//	if (X509_NAME_cmp(X509_CRL_get_issuer(crl), X509_get_issuer_name(peer_cert)) != 0) {
+//		msg (M_WARN, "CRL: CRL %s is from a different issuer than the issuer of "
+//			"certificate %s", crl_file, subject);
+//		retval = SUCCESS;
+//		goto end;
+//	}
 type RevokedDetector struct {
 	revokedCerts []pkix.RevokedCertificate
 	mu           sync.RWMutex
